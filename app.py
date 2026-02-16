@@ -1,8 +1,9 @@
 import streamlit as st
 from downloader import get_video_info, download_video
+from yt_dlp.utils import DownloadError
 
 # --------------------------------------------------
-# Page config (mobile friendly)
+# Page config
 # --------------------------------------------------
 st.set_page_config(
     page_title="Easy Video Downloader",
@@ -10,7 +11,7 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# Simple mobile-friendly styling
+# Mobile-friendly CSS
 # --------------------------------------------------
 st.markdown(
     """
@@ -20,9 +21,11 @@ st.markdown(
             font-size: 16px;
             padding: 0.6em;
         }
-        .stDownloadButton button {
-            background-color: #4CAF50;
-            color: white;
+        .error-box {
+            background: #ffe6e6;
+            padding: 1em;
+            border-radius: 8px;
+            color: #900;
         }
     </style>
     """,
@@ -34,8 +37,8 @@ st.markdown(
 # --------------------------------------------------
 st.title("🎬 Easy Video Downloader")
 st.write(
-    "Paste a **YouTube / Instagram / Facebook** video link and download it as **MP4**.\n\n"
-    "👉 One button per resolution, clean & simple."
+    "Paste a **public YouTube video link**.\n\n"
+    "⚠️ Some videos may fail on Streamlit Cloud due to platform blocking."
 )
 
 url = st.text_input(
@@ -44,37 +47,33 @@ url = st.text_input(
 )
 
 # --------------------------------------------------
-# Main logic
+# Logic
 # --------------------------------------------------
 if url:
     with st.spinner("Fetching video information..."):
         info = get_video_info(url)
 
     if info is None:
-        st.error("❌ Unable to fetch video info. Make sure the video is public.")
-    else:
-        # Thumbnail + title
-        st.image(info["thumbnail"], use_container_width=True)
-        st.subheader(info["title"])
+        st.error("❌ Could not fetch video info. Video may be private or blocked.")
+        st.stop()
 
-        st.markdown("### 📥 Select Resolution")
+    st.image(info["thumbnail"], use_container_width=True)
+    st.subheader(info["title"])
+    st.markdown("### 📥 Select Resolution")
 
-        # info["resolutions"] is a dict like:
-        # { "360p": "18", "720p": "137", ... }
-        for res, format_id in info["resolutions"].items():
+    for res, format_id in info["resolutions"].items():
 
-            if st.button(
-                f"⬇ Download {res}",
-                key=f"download_{res}"
-            ):
-                progress_bar = st.progress(0)
+        if st.button(f"⬇ Download {res}", key=f"download_{res}"):
 
-                def update_progress(p):
-                    try:
-                        progress_bar.progress(min(int(p), 100))
-                    except:
-                        pass
+            progress_bar = st.progress(0)
 
+            def update_progress(p):
+                try:
+                    progress_bar.progress(min(int(p), 100))
+                except:
+                    pass
+
+            try:
                 with st.spinner("Downloading and converting to MP4..."):
                     file_path = download_video(
                         url=url,
@@ -84,13 +83,30 @@ if url:
                         progress_callback=update_progress
                     )
 
-                st.success("✅ Video is ready!")
+                st.success("✅ Video ready!")
 
-                with open(file_path, "rb") as file:
+                with open(file_path, "rb") as f:
                     st.download_button(
-                        label="📥 Save MP4",
-                        data=file,
+                        "📥 Save MP4",
+                        f,
                         file_name=file_path.split("/")[-1],
                         mime="video/mp4",
                         key=f"save_{res}"
                     )
+
+            except DownloadError:
+                st.markdown(
+                    """
+                    <div class="error-box">
+                    ❌ Download blocked (HTTP 403).<br><br>
+                    This video cannot be downloaded from Streamlit Cloud.
+                    <br><br>
+                    ✅ Solution:
+                    <ul>
+                      <li>Run this app locally</li>
+                      <li>Or deploy on a VPS (DigitalOcean / Railway)</li>
+                    </ul>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
