@@ -1,6 +1,6 @@
 import yt_dlp
 import os
-from utils import convert_to_mp4, clean_filename
+from utils import clean_filename, convert_to_mp4
 
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -17,28 +17,29 @@ def get_video_info(url):
         "http_headers": HEADERS
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
 
-            formats = []
-            for f in info["formats"]:
-                if f.get("height") and f.get("vcodec") != "none":
-                    formats.append({
-                        "format_id": f["format_id"],
-                        "resolution": f"{f['height']}p"
-                    })
+    title = clean_filename(info["title"])
 
-            return {
-                "title": clean_filename(info["title"]),
-                "thumbnail": info["thumbnail"],
-                "formats": formats
-            }
-    except Exception as e:
-        return None
+    # -------- Deduplicate resolutions --------
+    resolutions = {}
+    for f in info["formats"]:
+        if f.get("height") and f.get("vcodec") != "none":
+            res = f"{f['height']}p"
+
+            # Keep first best format per resolution
+            if res not in resolutions:
+                resolutions[res] = f["format_id"]
+
+    return {
+        "title": title,
+        "thumbnail": info["thumbnail"],
+        "resolutions": resolutions  # { "720p": "137", ... }
+    }
 
 
-def download_video(url, format_id, title, resolution, progress_callback):
+def download_video(url, resolution, format_id, title, progress_callback):
     output_template = f"{DOWNLOAD_DIR}/{title} - {resolution}.%(ext)s"
 
     def hook(d):
@@ -50,9 +51,10 @@ def download_video(url, format_id, title, resolution, progress_callback):
                 pass
 
     ydl_opts = {
-        "format": format_id,
-        "outtmpl": output_template,
+        # Best video at resolution + best audio
+        "format": f"bestvideo[format_id={format_id}]+bestaudio/best",
         "merge_output_format": "mp4",
+        "outtmpl": output_template,
         "progress_hooks": [hook],
         "http_headers": HEADERS,
         "quiet": True,
