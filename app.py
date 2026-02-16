@@ -1,13 +1,17 @@
 import streamlit as st
 from downloader import get_video_info, download_video
 
-# ---------------- Page Config ----------------
+# --------------------------------------------------
+# Page config (mobile friendly)
+# --------------------------------------------------
 st.set_page_config(
     page_title="Easy Video Downloader",
     layout="centered"
 )
 
-# ---------------- Mobile Friendly Styling ----------------
+# --------------------------------------------------
+# Simple mobile-friendly styling
+# --------------------------------------------------
 st.markdown(
     """
     <style>
@@ -25,16 +29,23 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ---------------- UI ----------------
+# --------------------------------------------------
+# UI
+# --------------------------------------------------
 st.title("🎬 Easy Video Downloader")
-st.write("Paste a **YouTube / Instagram / Facebook** video link and download as MP4")
+st.write(
+    "Paste a **YouTube / Instagram / Facebook** video link and download it as **MP4**.\n\n"
+    "👉 One button per resolution, clean & simple."
+)
 
 url = st.text_input(
     "🔗 Paste video link",
     placeholder="https://www.youtube.com/watch?v=..."
 )
 
-# ---------------- Logic ----------------
+# --------------------------------------------------
+# Main logic
+# --------------------------------------------------
 if url:
     with st.spinner("Fetching video information..."):
         info = get_video_info(url)
@@ -42,15 +53,19 @@ if url:
     if info is None:
         st.error("❌ Unable to fetch video info. Make sure the video is public.")
     else:
+        # Thumbnail + title
         st.image(info["thumbnail"], use_container_width=True)
         st.subheader(info["title"])
 
         st.markdown("### 📥 Select Resolution")
 
-        for f in info["formats"]:
+        # info["resolutions"] is a dict like:
+        # { "360p": "18", "720p": "137", ... }
+        for res, format_id in info["resolutions"].items():
+
             if st.button(
-                f"⬇ Download {f['resolution']}",
-                key=f"download_{f['format_id']}"
+                f"⬇ Download {res}",
+                key=f"download_{res}"
             ):
                 progress_bar = st.progress(0)
 
@@ -63,13 +78,13 @@ if url:
                 with st.spinner("Downloading and converting to MP4..."):
                     file_path = download_video(
                         url=url,
-                        format_id=f["format_id"],
+                        resolution=res,
+                        format_id=format_id,
                         title=info["title"],
-                        resolution=f["resolution"],
                         progress_callback=update_progress
                     )
 
-                st.success("✅ Video ready!")
+                st.success("✅ Video is ready!")
 
                 with open(file_path, "rb") as file:
                     st.download_button(
@@ -77,5 +92,5 @@ if url:
                         data=file,
                         file_name=file_path.split("/")[-1],
                         mime="video/mp4",
-                        key=f"save_{f['format_id']}"
+                        key=f"save_{res}"
                     )
